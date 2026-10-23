@@ -179,14 +179,14 @@ def _rule_claims(text: str, model_name: str, url: str) -> List[Claim]:
         ("screen_refresh", re.compile(r"显示帧率[：:]\s*最高\s*(\d+)\s*Hz"), "Hz", "Hz"),
         ("screen_peak_brightness", re.compile(r"峰值亮度[：:]\s*(\d+)\s*nits?"), "nit", "nit"),
         ("battery", re.compile(r"(\d{4,5})\s*mAh"), "mAh", "mAh"),
-        ("charge_power", re.compile(r"(\d+)\s*W\s*有线"), "W", "W"),
-        ("charge_wireless_power", re.compile(r"(\d+)\s*W\s*无线"), "W", "W"),
-        ("weight", re.compile(r"重量[：:]\s*(\d+(?:\.\d+)?)\s*g"), "g", "g"),
-        ("thickness", re.compile(r"厚度[：:]\s*(\d+(?:\.\d+)?)\s*mm"), "mm", "mm"),
+        ("charge_power", re.compile(r"(\d+)\s*W[^\n]{0,10}?有线(?!反充)"), "W", "W"),
+        ("charge_wireless_power", re.compile(r"(\d+)\s*W[^\n]{0,10}?无线(?!反充)"), "W", "W"),
+        ("weight", re.compile(r"重量[：:].{0,30}?(\d+(?:\.\d+)?)\s*g"), "g", "g"),
+        ("thickness", re.compile(r"厚度[：:].{0,30}?(\d+(?:\.\d+)?)\s*mm"), "mm", "mm"),
     ]
     keywords = {
         "main_camera": (("主摄",), ()),
-        "telephoto": (("长焦",), ("超广角",)),
+        "telephoto": (("长焦",), ()),
         "ultrawide": (("超广角",), ()),
         "speaker": (("立体声", "扬声器"), ()),
         "usb": (("USB 3", "USB3", "USB 2", "USB2"), ()),
@@ -220,15 +220,19 @@ def _rule_claims(text: str, model_name: str, url: str) -> List[Claim]:
                 continue
             if any(word in line for word in excludes):
                 continue
-            if metric == "telephoto" and "MP" not in line:
+            if metric == "telephoto" and not any(mark in line for mark in ("MP", "亿")):
                 continue
             if metric == "usb" and not re.search(r"USB\s?\d", line):
                 continue
             value = line
             if metric in ("main_camera", "telephoto", "ultrawide"):
-                match = re.search(r"(\d+\s*MP[^｜|]*?" + ("主摄" if metric == "main_camera" else "长焦" if metric == "telephoto" else "超广角") + ")", line)
-                if match:
-                    value = match.group(1)
+                keyword = {"main_camera": "主摄", "telephoto": "长焦", "ultrawide": "超广角"}[metric]
+                segments = [seg.strip() for seg in re.split(r"[｜|]", line) if seg.strip()]
+                matched = [seg for seg in segments if keyword in seg]
+                if matched:
+                    value = matched[-1]
+                elif metric == "ultrawide":
+                    continue
             claims.append(Claim("", model_name, metric, value, "", {}, line, source, "official"))
             seen.add(metric)
             break
@@ -270,7 +274,71 @@ def _direct_url(model_name: str) -> Optional[str]:
 
 
 SIBLINGS = ["Pro", "Pro Max", "Ultra", "至尊版"]
-CACHE_VERSION = 2
+CACHE_VERSION = 5
+
+
+def _llm_prior(model_name: str, llm: LLMConfig) -> List[Claim]:
+    """Last resort: model knowledge, clearly marked and never treated as official."""
+    if not llm.enabled:
+        return []
+    body = {
+        "model": llm.model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是手机参数助手。只输出你确定知道的规格；不确定就省略该字段，"
+                    "不要编造型号或数字。只输出 JSON。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"机型：{model_name}\nmetric 枚举: {sorted(metrics.METRICS)}\n"
+                    '输出: {"claims":[{"metric":"...","value":"...","unit":"..."}]}\n'
+                    "优先给出 soc、screen_size、battery、charge_power、weight、main_camera。"
+                ),
+            },
+        ],
+    }
+    try:
+        resp = requests.post(
+            f"{llm.base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {llm.api_key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=120,
+        )
+        resp.raise_for_status()
+        content = re.sub(
+            r"^```(?:json)?|```$", "", resp.json()["choices"][0]["message"]["content"].strip(), flags=re.M
+        )
+        raw = json.loads(content).get("claims") or []
+    except Exception:  # noqa: BLE001 - optional fallback
+        return []
+
+    source = SourceRef("", f"{model_name} 模型知识", "LLM", "", "llm_prior")
+    claims = []
+    for item in raw:
+        metric = metrics.canonical(item.get("metric", ""))
+        value = str(item.get("value", "")).strip()
+        if not metric or not value:
+            continue
+        claims.append(
+            Claim(
+                id="",
+                model=model_name,
+                metric=metric,
+                value=value,
+                unit=str(item.get("unit") or metrics.unit(metric)),
+                condition={},
+                quote=f"模型知识：{value}",
+                source=source,
+                confidence="ai_prior",
+            )
+        )
+    return claims
 
 
 def _one(family: str, model_name: str, llm: LLMConfig) -> SpecResult:
@@ -310,7 +378,16 @@ def _one(family: str, model_name: str, llm: LLMConfig) -> SpecResult:
             spec_url = db[0].source.url
 
     if not claims:
+        prior = _llm_prior(model_name, llm)
+        if prior:
+            claims, status, detail = prior, "ai_prior", f"{len(prior)} 项（模型知识，未核实）"
+            spec_url = ""
+
+    if not claims:
         return SpecResult(model_name, spec_url, [], status, detail)
+
+    if status == "ai_prior":
+        return SpecResult(model_name, spec_url, claims, status, detail)
 
     payload = {
         "v": CACHE_VERSION,

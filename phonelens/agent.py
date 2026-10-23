@@ -144,12 +144,16 @@ class ReportAgent:
         )
 
     def tool_merge(self) -> None:
-        merged, self.overrides = apply_official(self.video_claims, self.official_claims)
+        strong = [c for c in self.official_claims if c.confidence in ("official", "spec_db")]
+        priors = [c for c in self.official_claims if c.confidence == "ai_prior"]
+        merged, self.overrides = apply_official(self.video_claims, strong)
+        existing = {(c.model, c.metric) for c in merged}
+        merged.extend([p for p in priors if (p.model, p.metric) not in existing])
         self.claims = _finalize(merged)
         self._log(
             "官网优先，冲突的字幕数值不再作为规格",
             "reconcile",
-            f"{len(self.claims)} 条；官方校准 {len(self.overrides)} 项",
+            f"{len(self.claims)} 条；官方校准 {len(self.overrides)} 项；模型知识 {len(priors)} 项",
         )
 
     def tool_conflicts(self) -> None:

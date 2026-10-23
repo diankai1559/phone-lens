@@ -191,13 +191,21 @@ def _spec_table(claims: List[Claim], models: List[str]) -> List[str]:
             parts = []
             for key in keys:
                 official = _official(claims, model, key)
-                source_claims = official or _pick([c for c in claims if c.model == model], key, 2)
+                if official:
+                    source_claims = official
+                    marker = "†" if official[0].confidence == "spec_db" else ""
+                else:
+                    video = _pick([c for c in claims if c.model == model], key, 2)
+                    if video:
+                        source_claims, marker = video, "*"
+                    else:
+                        source_claims = [
+                            c for c in claims
+                            if c.model == model and c.metric == key and c.confidence == "ai_prior"
+                        ][:2]
+                        marker = "‡"
                 for claim in source_claims:
-                    text = _value(claim)
-                    if not official:
-                        text += "*"
-                    elif claim.confidence == "spec_db":
-                        text += "†"
+                    text = _value(claim) + marker
                     if text not in parts:
                         parts.append(text)
             cells.append(" / ".join(parts) or "—")
@@ -210,7 +218,9 @@ def _spec_table(claims: List[Claim], models: List[str]) -> List[str]:
     lines.append("")
     if any(c.confidence == "spec_db" for c in claims):
         lines.append("`†` 来自参数库（官网未提供该机型页面）。")
-    if any(c.confidence not in ("official", "spec_db") for c in claims):
+    if any(c.confidence == "ai_prior" for c in claims):
+        lines.append("`‡` 为模型知识，未经官网或参数库核实。")
+    if any(c.confidence not in ("official", "spec_db", "ai_prior") for c in claims):
         lines.append("带 `*` 的为视频实测口径，官网参数未覆盖。")
     lines.append("")
     return lines
@@ -253,13 +263,19 @@ def _notes(
 ) -> List[str]:
     lines = ["## 需要注意", ""]
     ok = [s for s in spec_status if s.endswith(("ok", "ok_db"))]
-    missing = [s.split(":")[0] for s in spec_status if not s.endswith(("ok", "ok_db"))]
+    ai = [s.split(":")[0] for s in spec_status if s.endswith("ai_prior")]
+    missing = [
+        s.split(":")[0] for s in spec_status
+        if not s.endswith(("ok", "ok_db", "ai_prior"))
+    ]
     if ok:
         labels = []
         for item in ok:
             name, status = item.split(":")[0], item.rsplit(":", 1)[-1]
             labels.append(f"{name}（参数库）" if status == "ok_db" else name)
         lines.append(f"- 参数来源：{'、'.join(labels)}。")
+    if ai:
+        lines.append(f"- 官网和参数库都没有：{'、'.join(ai)}，规格来自模型知识（未核实）。")
     if missing:
         lines.append(f"- 官网未找到：{'、'.join(missing)}（可能未发布），这些机型只用视频数据。")
     if overrides:

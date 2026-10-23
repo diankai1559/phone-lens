@@ -79,6 +79,13 @@ def _title_matches(title: str, model_name: str) -> bool:
     return any(_squash(v) in squashed_title for v in variants)
 
 
+def _lines(html: str) -> List[str]:
+    text = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", html)
+    text = re.sub(r"<[^>]+>", "\n", text)
+    lines = [re.sub(r"\s+", " ", ln).strip() for ln in text.splitlines()]
+    return [ln for ln in lines if ln]
+
+
 def _detail(url: str) -> Optional[str]:
     try:
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=15)

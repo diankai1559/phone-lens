@@ -78,7 +78,7 @@ def verify(
     )
 
     corpus = "\n".join(r.text for r in results if r.text)
-    video_claims = [c for c in claims if c.source.method not in ("official_specs", "spec_db")]
+    video_claims = [c for c in claims if c.source.method not in ("official_specs", "spec_db", "llm_prior")]
     bad = [c.id for c in video_claims if not quote_supported(c.quote, corpus)] if corpus else []
     result.add(
         "quote_integrity",
@@ -110,7 +110,7 @@ def verify(
 
     result.add(
         "sources_attributed",
-        all(c.source.url for c in claims),
-        "每条 claim 都有可访问出处",
+        all(c.source.url or c.source.method == "llm_prior" for c in claims),
+        "每条 claim 都有可访问出处或明确标注为模型知识",
     )
     return result
