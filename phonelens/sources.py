@@ -57,6 +57,10 @@ def probe_all(client) -> List[SourceStatus]:
         futures = [pool.submit(_timed, name, fn) for name, fn in checks]
         statuses = [f.result() for f in futures]
 
+    for status in statuses:
+        if status.name == "bilibili" and status.status == "ok" and "匿名" in status.detail:
+            status.status = "degraded"
+
     llm = load_llm()
     statuses.append(
         SourceStatus(

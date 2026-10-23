@@ -285,8 +285,9 @@ async function loadHealth() {
     const res = await fetch("/api/probe");
     const data = await res.json();
     $("health").innerHTML = data.sources.map(s => {
-      const cls = s.status === "ok" ? "" : (s.status === "need_key" ? "warn" : "bad");
-      return `<span class="dot ${cls}" title="${esc(s.detail)}"><i></i>${esc(s.name)}</span>`;
+      const cls = s.status === "ok" ? "" : ((s.status === "need_key" || s.status === "degraded") ? "warn" : "bad");
+      const name = (s.name === "bilibili" && s.status === "degraded") ? "bilibili 未登录" : s.name;
+      return `<span class="dot ${cls}" title="${esc(s.detail)}"><i></i>${esc(name)}</span>`;
     }).join("");
     const bili = data.sources.find(s => s.name === "bilibili");
     $("loginBtn").style.display = (bili && String(bili.detail).includes("匿名")) ? "inline-block" : "none";

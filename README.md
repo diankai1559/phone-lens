@@ -10,17 +10,30 @@ pip install -e .
 pip install -e ".[web]"
 ```
 
-需要两个环境变量：
+## 启动
 
-```bash
-DEEPSEEK_API_KEY=sk-...        # claim 抽取、对话
-SILICONFLOW_API_KEY=sk-...     # 可选，视频无字幕时做 ASR
+在仓库目录里，不安装也能直接跑：
+
+```powershell
+python -m phonelens probe                        # 检查信源和 key
+python -m phonelens agent redmik100 --top 3      # 命令行生成报告
+python -m phonelens serve --port 8000            # 网页界面
 ```
 
-B 站登录态从 `~/.bilibili-cli/credential.json` 读取（bilibili-cli 生成）。没有也能跑，只是拿不到 AI 字幕。
+然后打开 <http://127.0.0.1:8000>。装过 `pip install -e ".[web]"` 的话，把 `python -m phonelens` 换成 `phonelens` 即可。
+
+网页界面左边是阶段进度，右边分「报告 / 证据 / 对话」三栏；未登录时右上角会出现「扫码登录」。
+
+需要两个环境变量：
+
+```powershell
+$env:DEEPSEEK_API_KEY="sk-..."        # claim 抽取、对话
+$env:SILICONFLOW_API_KEY="sk-..."     # 可选，视频无字幕时做 ASR
+```
 
 ## 账号与 Key
 
+- B 站登录：`phonelens login` 扫码，凭证存到 `~/.phonelens/credential.json`；之前用 bilibili-cli 登录的也能直接复用。
 - 没有 B 站登录态：可以搜索，但拿不到字幕和 AI 摘要；有 SiliconFlow key 时降级到 ASR，都没有则该视频标记为「未获取」，不会瞎编。
 - 两个 key 也可以写进 `~/.phonelens/config.json`，免设环境变量：
 
