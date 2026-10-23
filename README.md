@@ -68,18 +68,6 @@ phonelens catalog add --name "Redmi K110" --brand Redmi \
   --aliases "redmik110,k110,红米k110" --variants "标准版,Pro,Pro Max"
 ```
 
-## 实测
-
-K100：官网参数 + 3 个视频，118 条 claim，22 项按官网校准，3 组同口径冲突，7/7 校验通过。
-K60 至尊版（官网已下线）：参数库 9 项，41 条 claim，7/7 通过。
-机型对齐 24/24。
-
-```bash
-python scripts/bench.py --queries "redmik100,小米17" --top 3
-```
-
-完整数据在 [docs/metrics.md](docs/metrics.md)。
-
 ## 限制
 
 - 官网参数依赖 Playwright（首次需要本机有 Chromium），没装会退到参数库或视频口径。

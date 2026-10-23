@@ -2,7 +2,7 @@
 
     python scripts/bench.py --queries "redmik100,小米17" --top 3
 
-Writes docs/benchmark.json and prints a table you can paste into a resume.
+Writes out/benchmark.json and prints a table.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--queries", default="redmik100,小米17")
     parser.add_argument("--top", type=int, default=3)
-    parser.add_argument("--out", default=str(ROOT / "docs" / "benchmark.json"))
+    parser.add_argument("--out", default=str(ROOT / "out" / "benchmark.json"))
     args = parser.parse_args()
 
     rows = []

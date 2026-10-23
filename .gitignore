@@ -9,3 +9,5 @@ __pycache__/
 *.m4a
 *.wav
 .pytest_cache/
+docs/
+
