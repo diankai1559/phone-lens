@@ -104,10 +104,11 @@ class BiliClient:
         except Exception as exc:  # noqa: BLE001 - surfaced to the health matrix
             return False, f"网络不可达: {exc}"
         data = payload.get("data") or {}
-        if payload.get("code") != 0:
+        code = payload.get("code")
+        if code not in (0, -101):
             return False, f"nav 失败: {payload.get('message')}"
         if not data.get("isLogin"):
-            return True, "可匿名访问（无字幕权限）"
+            return True, "匿名模式（无字幕权限）"
         return True, f"已登录: {data.get('uname', '')}"
 
     def search(self, keyword: str, page: int = 1) -> List[Video]:

@@ -76,9 +76,10 @@ def probe_all(client) -> List[SourceStatus]:
 
 
 def strategy(statuses: List[SourceStatus]) -> dict:
-    table = {s.name: s.status for s in statuses}
+    table = {s.name: s for s in statuses}
+    bili = table.get("bilibili")
     return {
-        "subtitle": table.get("bilibili") == "ok",
-        "asr": table.get("asr_fallback") == "ok",
-        "llm": table.get("llm_extractor") == "ok",
+        "subtitle": bool(bili and bili.status == "ok" and "已登录" in bili.detail),
+        "asr": bool(table.get("asr_fallback") and table["asr_fallback"].status == "ok"),
+        "llm": bool(table.get("llm_extractor") and table["llm_extractor"].status == "ok"),
     }

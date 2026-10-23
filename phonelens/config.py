@@ -42,18 +42,30 @@ def _env(*names: str) -> str:
     return ""
 
 
+def _file_config() -> Dict[str, str]:
+    path = APP_DIR / "config.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if isinstance(v, str)}
+
+
 def load_llm() -> LLMConfig:
-    if _env("DEEPSEEK_API_KEY"):
+    cfg = _file_config()
+    if _env("DEEPSEEK_API_KEY") or cfg.get("deepseek_api_key"):
         return LLMConfig(
             base_url=_env("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1",
-            api_key=_env("DEEPSEEK_API_KEY"),
-            model=_env("PHONELENS_LLM_MODEL") or "deepseek-chat",
+            api_key=_env("DEEPSEEK_API_KEY") or cfg.get("deepseek_api_key", ""),
+            model=_env("PHONELENS_LLM_MODEL") or cfg.get("llm_model") or "deepseek-chat",
         )
-    if _env("SILICONFLOW_API_KEY"):
+    if _env("SILICONFLOW_API_KEY") or cfg.get("siliconflow_api_key"):
         return LLMConfig(
             base_url="https://api.siliconflow.cn/v1",
-            api_key=_env("SILICONFLOW_API_KEY"),
-            model=_env("PHONELENS_LLM_MODEL") or "Qwen/Qwen2.5-72B-Instruct",
+            api_key=_env("SILICONFLOW_API_KEY") or cfg.get("siliconflow_api_key", ""),
+            model=_env("PHONELENS_LLM_MODEL") or cfg.get("llm_model") or "Qwen/Qwen2.5-72B-Instruct",
         )
     return LLMConfig(base_url="", api_key="", model="")
 
@@ -62,16 +74,7 @@ def load_asr_key() -> str:
     key = _env("SILICONFLOW_API_KEY", "ASR_API_KEY")
     if key:
         return key
-    for path in (APP_DIR / "config.json", Path.home() / ".claude" / "skills" / "bilibili-knowledge" / "config.json"):
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            value = str(data.get("siliconflow_api_key", "")).strip()
-            if value:
-                return value
-    return ""
+    return _file_config().get("siliconflow_api_key", "").strip()
 
 
 def load_bili_credential() -> Optional[Dict[str, str]]:

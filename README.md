@@ -19,6 +19,17 @@ SILICONFLOW_API_KEY=sk-...     # 可选，视频无字幕时做 ASR
 
 B 站登录态从 `~/.bilibili-cli/credential.json` 读取（bilibili-cli 生成）。没有也能跑，只是拿不到 AI 字幕。
 
+## 账号与 Key
+
+- 没有 B 站登录态：可以搜索，但拿不到字幕和 AI 摘要；有 SiliconFlow key 时降级到 ASR，都没有则该视频标记为「未获取」，不会瞎编。
+- 两个 key 也可以写进 `~/.phonelens/config.json`，免设环境变量：
+
+```json
+{"deepseek_api_key": "sk-...", "siliconflow_api_key": "sk-..."}
+```
+
+- 凭证只放在用户目录，仓库里没有任何账号信息。
+
 ## 用法
 
 ```bash

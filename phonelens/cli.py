@@ -48,6 +48,8 @@ def cmd_report(args) -> int:
 
     print("", file=sys.stderr)
     print(f"claims={len(result.claims)} conflicts={len(result.conflicts)}", file=sys.stderr)
+    if not result.claims:
+        print("提示：没有取到正文。先跑 `phonelens probe`；无 B 站登录态时需配置 SILICONFLOW_API_KEY 走 ASR。", file=sys.stderr)
     for check in result.verification.checks:
         mark = "PASS" if check.ok else "FAIL"
         print(f"  [{mark}] {check.name}: {check.detail}", file=sys.stderr)
@@ -77,6 +79,8 @@ def cmd_agent(args) -> int:
     print("", file=sys.stderr)
     for step in result.trace:
         print(f"  [{step.action}] {step.observation}", file=sys.stderr)
+    if not result.claims:
+        print("提示：没有取到正文。先跑 `phonelens probe`；无 B 站登录态时需配置 SILICONFLOW_API_KEY 走 ASR。", file=sys.stderr)
     for check in result.verification.checks:
         print(f"  [{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}", file=sys.stderr)
     if args.json:
