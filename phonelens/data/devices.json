@@ -1,0 +1,89 @@
+{
+  "families": {
+    "Redmi K100": {
+      "brand": "Redmi",
+      "aliases": ["redmik100", "k100", "红米k100", "redmik100系列", "红米k100系列"],
+      "variants": ["标准版", "Pro", "Pro Max"]
+    },
+    "Redmi K90": {
+      "brand": "Redmi",
+      "aliases": ["redmik90", "k90", "红米k90", "redmik90系列"],
+      "variants": ["标准版", "Pro", "Pro Max", "至尊版", "Max"]
+    },
+    "Redmi K80": {
+      "brand": "Redmi",
+      "aliases": ["redmik80", "k80", "红米k80"],
+      "variants": ["标准版", "Pro", "Ultra", "至尊版"]
+    },
+    "Redmi Turbo 5": {
+      "brand": "Redmi",
+      "aliases": ["redmiturbo5", "turbo5", "红米turbo5", "turbo5max"],
+      "variants": ["标准版", "Pro", "Max"]
+    },
+    "Xiaomi 17": {
+      "brand": "Xiaomi",
+      "aliases": ["xiaomi17", "小米17", "mi17"],
+      "variants": ["标准版", "Pro", "Pro Max", "Ultra"]
+    },
+    "Xiaomi 16": {
+      "brand": "Xiaomi",
+      "aliases": ["xiaomi16", "小米16", "mi16"],
+      "variants": ["标准版", "Pro", "Pro Max", "Ultra"]
+    },
+    "Apple iPhone 18": {
+      "brand": "Apple",
+      "aliases": ["iphone18", "苹果18", "苹果iphone18"],
+      "variants": ["标准版", "Air", "Pro", "Pro Max"]
+    },
+    "Apple iPhone 17": {
+      "brand": "Apple",
+      "aliases": ["iphone17", "苹果17", "苹果iphone17"],
+      "variants": ["标准版", "Air", "Pro", "Pro Max"]
+    },
+    "iQOO 16": {
+      "brand": "iQOO",
+      "aliases": ["iqoo16", "iq16", "爱酷16"],
+      "variants": ["标准版", "Pro"]
+    },
+    "iQOO 15": {
+      "brand": "iQOO",
+      "aliases": ["iqoo15", "iq15", "爱酷15"],
+      "variants": ["标准版", "Pro", "Ultra"]
+    },
+    "OnePlus 16": {
+      "brand": "OnePlus",
+      "aliases": ["oneplus16", "一加16", "1+16"],
+      "variants": ["标准版", "Pro"]
+    },
+    "OnePlus 15": {
+      "brand": "OnePlus",
+      "aliases": ["oneplus15", "一加15", "1+15"],
+      "variants": ["标准版", "Pro"]
+    },
+    "OPPO Find X9": {
+      "brand": "OPPO",
+      "aliases": ["findx9", "oppofindx9", "findx9pro"],
+      "variants": ["标准版", "Pro", "Ultra", "Pro Max"]
+    },
+    "vivo X300": {
+      "brand": "vivo",
+      "aliases": ["vivox300", "x300", "x300pro"],
+      "variants": ["标准版", "Pro", "Pro mini"]
+    },
+    "Huawei Mate 80": {
+      "brand": "Huawei",
+      "aliases": ["mate80", "华为mate80"],
+      "variants": ["标准版", "Pro", "Pro Max", "RS"]
+    },
+    "Huawei Pura 90": {
+      "brand": "Huawei",
+      "aliases": ["pura90", "华为pura90"],
+      "variants": ["标准版", "Pro", "Ultra"]
+    },
+    "Honor Magic 8": {
+      "brand": "Honor",
+      "aliases": ["magic8", "荣耀magic8"],
+      "variants": ["标准版", "Pro", "Ultimate"]
+    }
+  }
+}

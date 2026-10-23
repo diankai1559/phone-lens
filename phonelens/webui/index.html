@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>机鉴 phonelens</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #111823;
+    --line: #1e293b;
+    --text: #e2e8f0;
+    --muted: #8b9bb4;
+    --accent: #5eead4;
+    --accent2: #38bdf8;
+    --warn: #fbbf24;
+    --err: #f87171;
+    --ok: #34d399;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 14px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    border-bottom: 1px solid var(--line); background: #0d131c; position: sticky; top: 0; z-index: 5;
+  }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  .logo span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 12px; }
+  .health { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .dot { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .dot i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .dot.bad i { background: var(--err); }
+  .dot.warn i { background: var(--warn); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  label.field { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
+  input[type=text], select {
+    width: 100%; background: #0b1119; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none;
+  }
+  input[type=text]:focus, select:focus { border-color: var(--accent2); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip {
+    font-size: 11px; color: var(--muted); border: 1px solid var(--line);
+    padding: 3px 8px; border-radius: 999px; cursor: pointer; background: transparent;
+  }
+  .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  .row label { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  button {
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #04121a;
+    border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  .stages { margin-top: 18px; display: grid; gap: 8px; }
+  .stage { display: flex; gap: 9px; font-size: 12px; color: var(--muted); align-items: flex-start; }
+  .stage em { font-style: normal; width: 14px; text-align: center; }
+  .stage.active { color: var(--accent); }
+  .stage.done { color: var(--text); }
+  .stage .detail { color: var(--muted); font-size: 11px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tab { padding: 7px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 13px; border: 1px solid transparent; }
+  .tab.active { color: var(--text); background: #16202e; border-color: var(--line); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .md h1 { font-size: 21px; margin: 4px 0 12px; }
+  .md h2 { font-size: 16px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .md h3 { font-size: 14px; margin: 16px 0 6px; color: var(--accent); }
+  .md table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0 14px; }
+  .md th, .md td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  .md th { background: #16202e; color: var(--muted); font-weight: 600; }
+  .md tr:nth-child(even) td { background: #0e151f; }
+  .md blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--accent2); background: #0e1621; color: var(--muted); }
+  .md a { color: var(--accent2); text-decoration: none; }
+  .md a:hover { text-decoration: underline; }
+  .md code { background: #0b1119; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 12px; color: var(--accent); }
+  .md ul { padding-left: 20px; }
+  .md hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 10px; font-size: 13px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .badge { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; color: var(--muted); }
+  .badge.ok { color: var(--ok); border-color: #14532d; }
+  .badge.warn { color: var(--warn); border-color: #78350f; }
+  .badge.bad { color: var(--err); border-color: #7f1d1d; }
+  .chat { display: flex; flex-direction: column; height: 62vh; }
+  .msgs { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+  .msg { max-width: 82%; padding: 10px 13px; border-radius: 10px; font-size: 13px; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: #14303a; border: 1px solid #1e4c56; }
+  .msg.bot { align-self: flex-start; background: #0e151f; border: 1px solid var(--line); }
+  .msg .meta { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
+  .chat-input { display: flex; gap: 8px; margin-top: 10px; }
+  .chat-input input { flex: 1; }
+  .err { color: var(--err); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 55vh; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">机鉴 <span>phonelens</span></div>
+    <div class="sub">多源 · 可溯源 · 会标冲突的手机评测报告</div>
+  </div>
+  <div class="health" id="health"></div>
+</header>
+
+<main>
+  <section class="card">
+    <label class="field">机型</label>
+    <input id="query" type="text" value="redmik100" placeholder="redmik100 / iPhone 18 Pro Max / 一加16" />
+    <div class="chips">
+      <span class="chip">redmik100</span>
+      <span class="chip">小米17</span>
+      <span class="chip">iphone 18 pro max</span>
+      <span class="chip">iqoo16</span>
+      <span class="chip">find x9 ultra</span>
+    </div>
+
+    <label class="field">采集视频数</label>
+    <select id="top">
+      <option value="3">3 个（快，约 1 分钟）</option>
+      <option value="5" selected>5 个（推荐）</option>
+      <option value="8">8 个（慢）</option>
+    </select>
+
+    <div class="row">
+      <label><input type="checkbox" id="family" checked /> 覆盖整个系列</label>
+      <label><input type="checkbox" id="asr" checked /> 允许 ASR</label>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <button id="run" style="flex:1">生成报告</button>
+      <button id="reset" class="btn-ghost">清空</button>
+    </div>
+
+    <div class="stages" id="stages"></div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <section class="card">
+    <div class="tabs">
+      <div class="tab active" data-tab="report">报告</div>
+      <div class="tab" data-tab="evidence">证据</div>
+      <div class="tab" data-tab="chat">对话</div>
+    </div>
+
+    <div class="panel active" id="panel-report">
+      <div id="stats" class="stats"></div>
+      <div id="report" class="md"><div class="empty">左侧输入机型，点击「生成报告」</div></div>
+    </div>
+
+    <div class="panel" id="panel-evidence">
+      <div id="conflicts"></div>
+      <div id="claims"></div>
+    </div>
+
+    <div class="panel" id="panel-chat">
+      <div class="chat">
+        <div class="msgs" id="msgs">
+          <div class="msg bot">报告生成后可以在这里追问，比如「续航为什么不一致」「哪台更值得买」。回答会带 claim 引用。
+            <span class="meta">引用 [C012] 可点开原视频</span>
+          </div>
+        </div>
+        <div class="chat-input">
+          <input id="q" type="text" placeholder="续航到底怎么样？" />
+          <button id="send">发送</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const STAGES = [
+  ["resolve", "机型对齐"],
+  ["probe", "信源探测"],
+  ["discover", "候选筛选"],
+  ["collect", "采集素材"],
+  ["extract", "claim 抽取"],
+  ["normalize", "口径归一"],
+  ["render", "渲染报告"],
+  ["verify", "反向校验"],
+];
+let jobId = null, timer = null, poll = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function renderStages(current, detail, done) {
+  $("stages").innerHTML = STAGES.map(([key, label]) => {
+    const idx = STAGES.findIndex(s => s[0] === key);
+    const curIdx = STAGES.findIndex(s => s[0] === current);
+    let cls = "", em = "○";
+    if (done || (curIdx > idx)) { cls = "done"; em = "✓"; }
+    else if (curIdx === idx) { cls = "active"; em = "◐"; }
+    const d = curIdx === idx && detail ? `<div class="detail">${esc(detail)}</div>` : "";
+    return `<div class="stage ${cls}"><em>${em}</em><div>${label}${d}</div></div>`;
+  }).join("");
+}
+
+function md(text) {
+  const lines = esc(text).split("\n");
+  let html = [], i = 0, inList = false;
+  const inline = (s) => s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\|.*\|$/.test(line)) {
+      const block = [];
+      while (i < lines.length && /^\|.*\|$/.test(lines[i])) block.push(lines[i++]);
+      const cells = (r) => r.split("|").slice(1, -1).map(c => c.trim());
+      const head = cells(block[0]);
+      const body = block.slice(2).map(cells);
+      html.push("<table><thead><tr>" + head.map(c => `<th>${inline(c)}</th>`).join("") + "</tr></thead><tbody>" +
+        body.map(r => "<tr>" + r.map(c => `<td>${inline(c)}</td>`).join("") + "</tr>").join("") + "</tbody></table>");
+      continue;
+    }
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) { html.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^---+\s*$/.test(line)) { html.push("<hr/>"); i++; continue; }
+    if (/^>\s?/.test(line)) { html.push(`<blockquote>${inline(line.replace(/^>\s?/, ""))}</blockquote>`); i++; continue; }
+    if (/^[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) items.push(`<li>${inline(lines[i++].replace(/^[-*]\s+/, ""))}</li>`);
+      html.push("<ul>" + items.join("") + "</ul>");
+      continue;
+    }
+    if (line.trim() === "") { i++; continue; }
+    html.push(`<p>${inline(line)}</p>`); i++;
+  }
+  return html.join("\n");
+}
+
+function renderEvidence(data) {
+  const claims = data.claims || [], conflicts = data.conflicts || [];
+  const byMetric = {};
+  claims.forEach(c => { byMetric[c.metric] = (byMetric[c.metric] || 0) + 1; });
+  $("conflicts").innerHTML = conflicts.length ? `<h2>数据分歧（${conflicts.length}）</h2>` + conflicts.map(c => {
+    const rows = c.claims.map(m => `<tr><td>${esc(m.value)}${esc(m.unit||"")}</td><td>${esc(JSON.stringify(m.condition))}</td><td><a href="${esc(m.source.url)}" target="_blank">${esc(m.id)}</a></td></tr>`).join("");
+    return `<h3>${esc(c.model)} · ${esc(c.metric)} · ${esc(c.reason)}</h3><table><thead><tr><th>数值</th><th>条件</th><th>出处</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }).join("") : "<h2>数据分歧</h2><p style='color:var(--muted)'>未检测到显著分歧。</p>";
+
+  $("claims").innerHTML = `<h2>Claim 列表（${claims.length}）</h2>` + `<table><thead><tr><th>ID</th><th>机型</th><th>指标</th><th>值</th><th>条件</th><th>出处</th></tr></thead><tbody>` +
+    claims.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.model)}</td><td>${esc(c.metric)}</td><td>${esc(c.value)}${esc(c.unit||"")}</td><td>${esc(JSON.stringify(c.condition))}</td><td><a href="${esc(c.source.url)}" target="_blank">${esc(c.source.bvid)}</a></td></tr>`).join("") +
+    "</tbody></table>";
+}
+
+async function loadHealth() {
+  try {
+    const res = await fetch("/api/probe");
+    const data = await res.json();
+    $("health").innerHTML = data.sources.map(s => {
+      const cls = s.status === "ok" ? "" : (s.status === "need_key" ? "warn" : "bad");
+      return `<span class="dot ${cls}" title="${esc(s.detail)}"><i></i>${esc(s.name)}</span>`;
+    }).join("");
+  } catch (e) {
+    $("health").innerHTML = '<span class="dot bad"><i></i>后端未连接</span>';
+  }
+}
+
+async function start() {
+  const query = $("query").value.trim();
+  if (!query) return;
+  $("run").disabled = true; $("err").textContent = "";
+  $("report").innerHTML = '<div class="empty">正在采集与抽取…</div>';
+  $("stats").innerHTML = ""; $("claims").innerHTML = ""; $("conflicts").innerHTML = "";
+  renderStages("resolve", "准备中", false);
+
+  try {
+    const res = await fetch("/api/report", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, top: Number($("top").value), family: $("family").checked, allow_asr: $("asr").checked })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "启动失败");
+    jobId = data.job_id;
+    poll = setInterval(tick, 700);
+  } catch (e) {
+    $("err").textContent = e.message;
+    $("run").disabled = false;
+  }
+}
+
+async function tick() {
+  if (!jobId) return;
+  let data;
+  try {
+    const res = await fetch(`/api/report/${jobId}`);
+    data = await res.json();
+  } catch (e) { return; }
+
+  if (data.status === "running") {
+    renderStages(data.stage, data.detail, false);
+    return;
+  }
+  clearInterval(poll); poll = null; $("run").disabled = false;
+
+  if (data.status === "error") {
+    $("err").textContent = data.error || "生成失败";
+    renderStages(data.stage, "", false);
+    return;
+  }
+
+  renderStages("done", "", true);
+  const v = data.verification || {};
+  const checks = (v.checks || []).map(c => `<span class="badge ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"} ${esc(c.name)}</span>`).join("");
+  $("stats").innerHTML = `<span class="badge ok">${data.claims.length} claims</span>` +
+    `<span class="badge ${data.conflicts.length ? "warn" : "ok"}">${data.conflicts.length} 冲突</span>` + checks;
+  $("report").innerHTML = md(data.report || "");
+  renderEvidence(data);
+  $("msgs").innerHTML = `<div class="msg bot">已载入 ${data.claims.length} 条 claim，可以开始追问。</div>`;
+}
+
+async function ask() {
+  const q = $("q").value.trim();
+  if (!q || !jobId) return;
+  $("q").value = "";
+  const box = document.createElement("div");
+  box.className = "msg user"; box.textContent = q;
+  $("msgs").appendChild(box);
+  const loading = document.createElement("div");
+  loading.className = "msg bot"; loading.textContent = "思考中…";
+  $("msgs").appendChild(loading);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, question: q })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "对话失败");
+    loading.className = "msg bot md";
+    loading.innerHTML = md(data.text) + `<span class="meta">${data.grounded ? "✓ 有依据" : "⚠ 无依据"} · 引用 ${data.citations.join(", ") || "无"}</span>`;
+  } catch (e) {
+    loading.textContent = "出错：" + e.message;
+    loading.style.color = "var(--err)";
+  }
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+
+document.querySelectorAll(".chip").forEach(chip => chip.onclick = () => { $("query").value = chip.textContent; });
+document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  tab.classList.add("active");
+  $("panel-" + tab.dataset.tab).classList.add("active");
+});
+$("run").onclick = start;
+$("reset").onclick = () => { location.reload(); };
+$("send").onclick = ask;
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+$("query").addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });
+loadHealth();
+</script>
+</body>
+</html>
