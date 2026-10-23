@@ -26,6 +26,7 @@ app = FastAPI(title="phonelens", version="0.1.0")
 
 JOBS: Dict[str, dict] = {}
 LOGIN: Dict[str, bili_login.LoginSession] = {}
+SESSIONS: Dict[str, dict] = {}
 LOCK = threading.Lock()
 
 
@@ -34,10 +35,12 @@ class ReportIn(BaseModel):
     top: int = 5
     family: bool = True
     allow_asr: bool = True
+    session_id: Optional[str] = None
 
 
 class ChatIn(BaseModel):
-    job_id: str
+    job_id: Optional[str] = None
+    session_id: Optional[str] = None
     question: str
 
 
@@ -46,6 +49,41 @@ def _update(job_id: str, **fields) -> None:
         job = JOBS.get(job_id)
         if job:
             job.update(fields)
+
+
+def _merge_session(session_id: str, claims: list) -> tuple:
+    from .conflict import detect, normalize_claim
+
+    sess = SESSIONS.setdefault(
+        session_id, {"prefix": 0, "claims": [], "conflicts": [], "conversation": None}
+    )
+    index = sess["prefix"]
+    prefix = chr(65 + index) if index < 26 else f"Z{index}"
+    sess["prefix"] = index + 1
+
+    seen = {
+        (c.model, c.metric, str(c.value), tuple(sorted((k, str(v)) for k, v in c.condition.items())), c.source.bvid)
+        for c in sess["claims"]
+    }
+    for claim in claims:
+        claim = normalize_claim(claim)
+        key = (claim.model, claim.metric, str(claim.value), tuple(sorted((k, str(v)) for k, v in claim.condition.items())), claim.source.bvid)
+        if key in seen:
+            continue
+        seen.add(key)
+        claim.id = f"{prefix}{claim.id[-3:]}"
+        sess["claims"].append(claim)
+
+    merged, conflicts = detect(sess["claims"])
+    sess["claims"], sess["conflicts"] = merged, conflicts
+    models = sorted({c.model for c in merged})
+
+    previous = sess.get("conversation")
+    conversation = Conversation(load_llm(), merged, conflicts, "、".join(models))
+    if previous is not None:
+        conversation.history = previous.history
+    sess["conversation"] = conversation
+    return sess, models
 
 
 def _worker(job_id: str, req: ReportIn) -> None:
@@ -76,7 +114,11 @@ def _worker(job_id: str, req: ReportIn) -> None:
         )
         result = agent.run()
         conversation = None
-        if load_llm().enabled:
+        session_models: list = []
+        if req.session_id:
+            sess, session_models = _merge_session(req.session_id, result.claims)
+            conversation = sess["conversation"]
+        elif load_llm().enabled:
             conversation = Conversation(
                 load_llm(), result.claims, result.conflicts, result.resolution.label
             )
@@ -91,6 +133,7 @@ def _worker(job_id: str, req: ReportIn) -> None:
             trace=[s.__dict__ for s in result.trace],
             verification=result.verification.to_dict(),
             resolution=result.resolution.__dict__,
+            session_models=session_models,
             conversation=conversation,
             updated=time.time(),
         )
@@ -141,12 +184,17 @@ def get_report(job_id: str) -> dict:
 
 @app.post("/api/chat")
 def chat(req: ChatIn) -> dict:
-    job = JOBS.get(req.job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    conversation: Optional[Conversation] = job.get("conversation")
+    conversation: Optional[Conversation] = None
+    if req.session_id:
+        sess = SESSIONS.get(req.session_id)
+        if sess:
+            conversation = sess.get("conversation")
+    if conversation is None and req.job_id:
+        job = JOBS.get(req.job_id)
+        if job:
+            conversation = job.get("conversation")
     if conversation is None:
-        raise HTTPException(status_code=400, detail="未配置 LLM key，无法对话")
+        raise HTTPException(status_code=400, detail="没有可用的会话，请先生成报告")
     answer = conversation.ask(req.question)
     return {
         "text": answer.text,

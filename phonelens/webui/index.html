@@ -154,7 +154,7 @@
 
     <div class="row" style="margin-top:18px">
       <button id="run" style="flex:1">生成报告</button>
-      <button id="reset" class="btn-ghost">清空</button>
+      <button id="newSession" class="btn-ghost" title="清空已加载的机型">新会话</button>
     </div>
 
     <div class="stages" id="stages"></div>
@@ -219,6 +219,14 @@ const STAGES = [
   ["verify", "反向校验"],
 ];
 let jobId = null, timer = null, poll = null, qrTimer = null, qrId = null;
+const SID = (() => {
+  let value = localStorage.getItem("phonelens_sid");
+  if (!value) {
+    value = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+    localStorage.setItem("phonelens_sid", value);
+  }
+  return value;
+})();
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -367,7 +375,7 @@ async function start() {
   try {
     const res = await fetch("/api/report", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, top: Number($("top").value), family: $("family").checked, allow_asr: $("asr").checked })
+      body: JSON.stringify({ query, top: Number($("top").value), family: $("family").checked, allow_asr: $("asr").checked, session_id: SID })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "启动失败");
@@ -411,7 +419,10 @@ async function tick() {
   }
   $("report").innerHTML = md(data.report || "");
   renderEvidence(data);
-  $("msgs").innerHTML = `<div class="msg bot">已载入 ${data.claims.length} 条 claim，可以开始追问。</div>`;
+  const models = data.session_models || [];
+  $("msgs").innerHTML = models.length
+    ? `<div class="msg bot">已载入 ${models.length} 款机型：${esc(models.join("、"))}。可以直接问「哪款更值得买」，我会按同一口径对比。</div>`
+    : `<div class="msg bot">已载入 ${data.claims.length} 条 claim，可以开始追问。</div>`;
 }
 
 async function ask() {
@@ -429,7 +440,7 @@ async function ask() {
   try {
     const res = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId, question: q })
+      body: JSON.stringify({ job_id: jobId, session_id: SID, question: q })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "对话失败");
@@ -450,7 +461,10 @@ document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
   $("panel-" + tab.dataset.tab).classList.add("active");
 });
 $("run").onclick = start;
-$("reset").onclick = () => { location.reload(); };
+$("newSession").onclick = () => {
+  localStorage.removeItem("phonelens_sid");
+  location.reload();
+};
 $("loginBtn").onclick = openLogin;
 $("qrRefresh").onclick = openLogin;
 $("qrClose").onclick = () => showLogin(false);

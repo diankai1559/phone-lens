@@ -19,18 +19,19 @@ from . import metrics
 from .config import LLMConfig
 from .models import Claim, Conflict
 
-ID_RE = re.compile(r"\bC\d{3}\b")
+ID_RE = re.compile(r"\b[A-Z]\d{3}\b")
 
 CHITCHAT = ("你好", "谢谢", "在吗", "hi", "hello", "你是谁", "能做什么")
 
 SYSTEM_PROMPT = """你是手机评测助手，只能依据【证据包】回答。
 
 规则：
-1. 每条事实性结论后面必须附上 claim id，格式 [C012]；可以一条句子里放多个。
+1. 每条事实性结论后面必须附上 claim id，格式 [A012]；可以一条句子里放多个。
 2. 证据包里没有的信息，直接说「素材中没有提到」，不要用常识或记忆补充。
 3. 允许比较、归纳、做购买建议，但必须给出依据；推断部分要标注「推断」。
 4. 数据口径不同（例如亮度/网络/测试时长不同）时，先说不可直接比较，再分别陈述。
-5. 回答用中文，简洁，不要复述整份报告。"""
+5. 证据包可能包含多款机型。做对比时必须同一指标、同一测试条件；条件不同的数据分开列，不要直接下「谁更强」的结论。
+6. 回答用中文，简洁，不要复述整份报告。"""
 
 
 @dataclass
@@ -67,7 +68,11 @@ class Conversation:
 
     def evidence(self, question: str) -> str:
         ranked = self._rank(question)
-        lines = [f"机型：{self.family}", "claim 列表（id | 机型 | 指标 | 数值 | 条件 | 出处BV）："]
+        models = sorted({c.model for c in self.claims})
+        lines = [
+            f"机型：{'、'.join(models) or self.family}（共 {len(models)} 款，可做对比）",
+            "claim 列表（id | 机型 | 指标 | 数值 | 条件 | 出处）：",
+        ]
         used = 0
         picked = []
         for claim in ranked:
