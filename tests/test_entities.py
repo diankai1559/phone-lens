@@ -44,6 +44,17 @@ def test_cross_brand_resolution(query, family, variant):
         assert res.explicit_variant
 
 
+def test_variant_is_not_duplicated():
+    res = resolve("小米18 Pro")
+    assert res.family == "Xiaomi 18"
+    assert res.variants == ["Pro"]
+    assert res.model_name("Pro") == "Xiaomi 18 Pro"
+
+    res = resolve("小米18 Pro Max")
+    assert res.family == "Xiaomi 18"
+    assert res.model_name("Pro Max") == "Xiaomi 18 Pro Max"
+
+
 def test_parser_for_unlisted_model():
     res = resolve("Redmi Note 15 Pro")
     assert res.family == "Redmi Note 15"

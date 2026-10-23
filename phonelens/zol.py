@@ -35,53 +35,87 @@ LABELS = {
 }
 
 
-def _search(model_name: str) -> Optional[str]:
+BRAND_ALIASES = {
+    "xiaomi": ["小米"],
+    "redmi": ["红米"],
+    "apple": ["苹果"],
+    "honor": ["荣耀"],
+    "huawei": ["华为"],
+    "oneplus": ["一加"],
+    "realme": ["真我"],
+    "samsung": ["三星"],
+    "iqoo": ["爱酷"],
+}
+
+TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S)
+
+
+def _candidates(model_name: str) -> List[str]:
     try:
         encoded = urllib.parse.quote(model_name.encode("gbk"))
     except UnicodeEncodeError:
-        return None
+        return []
     try:
         resp = requests.get(SEARCH + encoded, headers={"User-Agent": UA}, timeout=12)
     except Exception:  # noqa: BLE001 - fallback source, failure is expected
-        return None
-    ids = re.findall(r"detail\.zol\.com\.cn/(\d+)/(\d+)/", resp.text)
-    if not ids:
-        return None
-    return DETAIL % ids[0]
-
-
-def _lines(html: str) -> List[str]:
-    text = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", html)
-    text = re.sub(r"<[^>]+>", "\n", text)
-    lines = [re.sub(r"\s+", " ", ln).strip() for ln in text.splitlines()]
-    return [ln for ln in lines if ln]
-
-
-def fetch(model_name: str) -> List[Claim]:
-    url = _search(model_name)
-    if not url:
         return []
+    ids = list(dict.fromkeys(re.findall(r"detail\.zol\.com\.cn/(\d+)/(\d+)/", resp.text)))
+    return [DETAIL % pair for pair in ids[:5]]
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[\s\-_·（）()]+", "", str(text)).lower()
+
+
+def _title_matches(title: str, model_name: str) -> bool:
+    squashed_title = _squash(title)
+    variants = [model_name]
+    lowered = model_name.lower()
+    for brand, aliases in BRAND_ALIASES.items():
+        if lowered.startswith(brand):
+            rest = model_name[len(brand):].strip()
+            variants.extend(f"{alias} {rest}" for alias in aliases)
+            break
+    return any(_squash(v) in squashed_title for v in variants)
+
+
+def _detail(url: str) -> Optional[str]:
     try:
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=15)
     except Exception:  # noqa: BLE001
-        return []
+        return None
     resp.encoding = "gbk"
-    lines = _lines(resp.text)
-    source = SourceRef("", f"{model_name} 参数库", "ZOL", url, "spec_db")
-    claims: List[Claim] = []
-    seen = set()
-    for index, line in enumerate(lines[:-1]):
-        if line not in LABELS:
+    return resp.text
+
+
+def fetch(model_name: str) -> List[Claim]:
+    for url in _candidates(model_name):
+        html = _detail(url)
+        if not html:
             continue
-        metric, unit = LABELS[line]
-        if metric in seen:
+        title_match = TITLE_RE.search(html)
+        title = title_match.group(1).strip() if title_match else ""
+        if not _title_matches(title, model_name):
             continue
-        value = lines[index + 1]
-        if not value or len(value) > 60 or value == line:
-            continue
-        claims.append(Claim("", model_name, metric, value, unit, {}, value, source, "spec_db"))
-        seen.add(metric)
-    return claims
+
+        lines = _lines(html)
+        source = SourceRef("", title or f"{model_name} 参数库", "ZOL", url, "spec_db")
+        claims: List[Claim] = []
+        seen = set()
+        for index, line in enumerate(lines[:-1]):
+            if line not in LABELS:
+                continue
+            metric, unit = LABELS[line]
+            if metric in seen:
+                continue
+            value = lines[index + 1]
+            if not value or len(value) > 60 or value == line:
+                continue
+            claims.append(Claim("", model_name, metric, value, unit, {}, value, source, "spec_db"))
+            seen.add(metric)
+        if claims:
+            return claims
+    return []
 
 
 def cite(url: str) -> str:

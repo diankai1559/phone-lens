@@ -30,6 +30,11 @@
       "aliases": ["xiaomi16", "小米16", "mi16"],
       "variants": ["标准版", "Pro", "Pro Max", "Ultra"]
     },
+    "Xiaomi 18": {
+      "brand": "Xiaomi",
+      "aliases": ["xiaomi18", "小米18", "mi18"],
+      "variants": ["标准版", "Pro", "Pro Max", "Ultra"]
+    },
     "Apple iPhone 18": {
       "brand": "Apple",
       "aliases": ["iphone18", "苹果18", "苹果iphone18"],

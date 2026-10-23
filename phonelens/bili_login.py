@@ -13,7 +13,7 @@ import os
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import requests
 
@@ -31,10 +31,17 @@ STATUS = {
 }
 
 
+def _session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({"User-Agent": UA, "Referer": "https://www.bilibili.com/"})
+    return s
+
+
 @dataclass
 class LoginSession:
     key: str
     url: str
+    http: requests.Session = field(default_factory=_session, repr=False, compare=False)
     created: float = field(default_factory=time.time)
     status: str = "waiting"
     detail: str = ""
@@ -44,21 +51,15 @@ class LoginSession:
         return time.time() - self.created
 
 
-def _session() -> requests.Session:
-    s = requests.Session()
-    s.headers.update({"User-Agent": UA, "Referer": "https://www.bilibili.com/"})
-    return s
-
-
 def create() -> LoginSession:
-    with _session() as s:
-        resp = s.get(GENERATE, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+    s = _session()
+    resp = s.get(GENERATE, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
     payload = data.get("data") or {}
     if not payload.get("url") or not payload.get("qrcode_key"):
         raise RuntimeError(f"生成二维码失败: {data.get('message')}")
-    return LoginSession(key=payload["qrcode_key"], url=payload["url"])
+    return LoginSession(key=payload["qrcode_key"], url=payload["url"], http=s)
 
 
 def svg(url: str) -> str:
@@ -84,41 +85,90 @@ def ascii_qr(url: str) -> str:
 
 
 def poll_once(session: LoginSession) -> LoginSession:
-    with _session() as s:
-        resp = s.get(POLL, params={"qrcode_key": session.key}, timeout=10)
-        payload = resp.json()
+    resp = session.http.get(POLL, params={"qrcode_key": session.key}, timeout=10)
+    payload = resp.json()
     data = payload.get("data") or {}
     code = int(data.get("code", -1))
-    session.status = STATUS.get(code, "error")
-    session.detail = str(data.get("message") or "")
-    if session.status == "confirmed":
-        cred = _collect_cookies(data.get("url", ""))
-        if not cred.get("sessdata"):
-            session.status = "error"
-            session.detail = "登录成功但未取到 SESSDATA"
-            return session
-        save(cred)
-        session.detail = "登录成功"
+
+    if code != 0:
+        session.status = STATUS.get(code, "error")
+        session.detail = str(data.get("message") or "")
+        return session
+
+    session.status = "finalizing"
+    session.detail = "正在写入凭证"
+
+    cookies = _collect_cookies(session.http, str(data.get("url") or ""))
+    for name, value in resp.cookies.get_dict().items():
+        cookies.setdefault(name, value)
+    if "SESSDATA" not in cookies:
+        try:
+            session.http.get("https://www.bilibili.com/", timeout=10)
+        except requests.RequestException:
+            pass
+        for name, value in session.http.cookies.get_dict().items():
+            cookies.setdefault(name, value)
+
+    if not cookies.get("SESSDATA"):
+        names = ",".join(list(cookies)[:6]) or "无"
+        session.status = "error"
+        session.detail = f"未取到 SESSDATA（收到 {len(cookies)} 个 cookie：{names}）"
+        return session
+
+    ok, message = _validate(cookies)
+    if not ok:
+        session.status = "error"
+        session.detail = f"cookie 校验失败：{message or 'nav 未登录'}"
+        return session
+
+    save(cookies)
+    session.status = "confirmed"
+    session.detail = "登录成功"
     return session
 
 
-def _collect_cookies(cross_domain: str) -> Dict[str, str]:
+def _parse_set_cookie(headers: List[str]) -> Dict[str, str]:
     cookies: Dict[str, str] = {}
-    if not cross_domain:
-        return cookies
-    with _session() as s:
+    for header in headers:
+        name, _, rest = header.partition("=")
+        if not name or not rest:
+            continue
+        cookies[name.strip()] = rest.split(";", 1)[0].strip()
+    return cookies
+
+
+def _collect_cookies(http: requests.Session, cross_domain: str) -> Dict[str, str]:
+    cookies: Dict[str, str] = {}
+    if cross_domain:
         current = cross_domain
         for _ in range(8):
-            resp = s.get(current, allow_redirects=False, timeout=15)
+            resp = http.get(current, allow_redirects=False, timeout=15)
             headers = resp.raw.headers.getlist("Set-Cookie") if hasattr(resp.raw.headers, "getlist") else []
-            for header in headers:
-                name, _, rest = header.partition("=")
-                cookies[name.strip()] = rest.split(";", 1)[0].strip()
+            cookies.update(_parse_set_cookie(headers))
+            cookies.update(resp.cookies.get_dict())
             location = resp.headers.get("Location")
             if not location or resp.status_code not in (301, 302, 303, 307, 308):
                 break
             current = urllib.parse.urljoin(current, location)
+    for name, value in http.cookies.get_dict().items():
+        cookies.setdefault(name, value)
     return cookies
+
+
+def _validate(cookies: Dict[str, str]) -> tuple:
+    try:
+        resp = requests.get(
+            "https://api.bilibili.com/x/web-interface/nav",
+            headers={"User-Agent": UA},
+            cookies=cookies,
+            timeout=10,
+        )
+        payload = resp.json()
+    except (requests.RequestException, ValueError) as exc:
+        return False, str(exc)[:80]
+    if payload.get("code") != 0:
+        return False, str(payload.get("message") or "")
+    return bool((payload.get("data") or {}).get("isLogin")), "nav isLogin=false"
 
 
 def save(cookies: Dict[str, str]) -> None:

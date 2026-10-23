@@ -269,66 +269,73 @@ def _direct_url(model_name: str) -> Optional[str]:
     return None
 
 
-def fetch(family: str, variants: List[str], llm: LLMConfig) -> List[SpecResult]:
+SIBLINGS = ["Pro", "Pro Max", "Ultra", "至尊版"]
+CACHE_VERSION = 2
+
+
+def _one(family: str, model_name: str, llm: LLMConfig) -> SpecResult:
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
-    results: List[SpecResult] = []
+    cache_file = SPEC_DIR / f"{_slug_for(model_name)}.json"
+    if cache_file.exists():
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            claims = _from_dicts(data.get("claims") or [])
+            if claims and data.get("v") == CACHE_VERSION:
+                return SpecResult(model_name, data.get("url", ""), claims, data.get("status", "ok"), "cache")
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+
+    url = _direct_url(model_name) or discover(family, model_name)
+    spec_url = url.rstrip("/") + "/specs" if url else ""
+    claims: List[Claim] = []
+    status, detail = "unavailable", "未找到参数页（可能未发布）"
+
+    if url and _slug_matches(url, model_name):
+        try:
+            text = _render(spec_url)
+        except Exception as exc:  # noqa: BLE001 - reported, not raised
+            status, detail = "render_failed", str(exc)[:120]
+        else:
+            if _mentions(text, family):
+                merged = _rule_claims(text, model_name, spec_url)
+                have = {c.metric for c in merged}
+                merged.extend([c for c in _llm_claims(text, model_name, spec_url, llm) if c.metric not in have])
+                if merged:
+                    claims, status, detail = merged, "ok", f"{len(merged)} 项"
+
+    if not claims:
+        db = zol.fetch(model_name)
+        if db:
+            claims, status, detail = db, "ok_db", f"{len(db)} 项（参数库）"
+            spec_url = db[0].source.url
+
+    if not claims:
+        return SpecResult(model_name, spec_url, [], status, detail)
+
+    payload = {
+        "v": CACHE_VERSION,
+        "url": spec_url,
+        "status": status,
+        "fetched_at": time.strftime("%Y-%m-%d"),
+        "claims": [c.to_dict() for c in claims],
+    }
+    cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return SpecResult(model_name, spec_url, claims, status, detail)
+
+
+def fetch(family: str, variants: List[str], llm: LLMConfig) -> List[SpecResult]:
     models = [f"{family} {v}".strip() if v not in ("", "标准版") else family for v in variants] or [family]
-
+    results: List[SpecResult] = []
     for model_name in models:
-        slug = _slug_for(model_name)
-        cache_file = SPEC_DIR / f"{slug}.json"
-        if cache_file.exists():
-            try:
-                data = json.loads(cache_file.read_text(encoding="utf-8"))
-                claims = _from_dicts(data.get("claims") or [])
-                if claims:
-                    results.append(
-                        SpecResult(model_name, data.get("url", ""), claims, data.get("status", "ok"), "cache")
-                    )
-                    continue
-            except (OSError, json.JSONDecodeError, KeyError):
-                pass
-
-        url = _direct_url(model_name) or discover(family, model_name)
-        spec_url = url.rstrip("/") + "/specs" if url else ""
-        claims: List[Claim] = []
-        status, detail = "unavailable", "官网页面未找到"
-
-        if url and _slug_matches(url, model_name):
-            try:
-                text = _render(spec_url)
-            except Exception as exc:  # noqa: BLE001 - reported, not raised
-                status, detail = "render_failed", str(exc)[:120]
-            else:
-                if not _mentions(text, family):
-                    status, detail = "offline", "官网已下线该机型页面"
-                else:
-                    merged = _rule_claims(text, model_name, spec_url)
-                    have = {c.metric for c in merged}
-                    merged.extend([c for c in _llm_claims(text, model_name, spec_url, llm) if c.metric not in have])
-                    if merged:
-                        claims, status, detail = merged, "ok", f"{len(merged)} 项"
-                    else:
-                        status, detail = "empty", "页面无可用参数"
-
-        if not claims:
-            db = zol.fetch(model_name)
-            if db:
-                claims, status, detail = db, "ok_db", f"{len(db)} 项（参数库）"
-                spec_url = db[0].source.url
-
-        if not claims:
-            results.append(SpecResult(model_name, spec_url, [], status, detail))
-            continue
-
-        payload = {
-            "url": spec_url,
-            "status": status,
-            "fetched_at": time.strftime("%Y-%m-%d"),
-            "claims": [c.to_dict() for c in claims],
-        }
-        cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        results.append(SpecResult(model_name, spec_url, claims, status, detail))
+        result = _one(family, model_name, llm)
+        if not result.claims and model_name == family:
+            for sibling in SIBLINGS:
+                alt = _one(family, f"{family} {sibling}", llm)
+                if alt.claims:
+                    alt.detail = f"{family} 参数未找到，改用同系列 {alt.model}"
+                    result = alt
+                    break
+        results.append(result)
     return results
 
 

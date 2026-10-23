@@ -209,7 +209,7 @@ def _spec_table(claims: List[Claim], models: List[str]) -> List[str]:
         lines.append("| — | 未获取到参数 |")
     lines.append("")
     if any(c.confidence == "spec_db" for c in claims):
-        lines.append("`†` 来自参数库（小米官网该机型页面已下线）。")
+        lines.append("`†` 来自参数库（官网未提供该机型页面）。")
     if any(c.confidence not in ("official", "spec_db") for c in claims):
         lines.append("带 `*` 的为视频实测口径，官网参数未覆盖。")
     lines.append("")
@@ -261,7 +261,7 @@ def _notes(
             labels.append(f"{name}（参数库）" if status == "ok_db" else name)
         lines.append(f"- 参数来源：{'、'.join(labels)}。")
     if missing:
-        lines.append(f"- 官网未找到：{'、'.join(missing)}，这些机型只用视频数据。")
+        lines.append(f"- 官网未找到：{'、'.join(missing)}（可能未发布），这些机型只用视频数据。")
     if overrides:
         lines.append(f"- 视频与官网不一致的 {len(overrides)} 项（如电池、重量）已按官网校准。")
 

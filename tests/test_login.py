@@ -17,3 +17,15 @@ def test_svg_is_data_uri():
     uri = bili_login.svg("https://passport.bilibili.com/h5-app/passport/login/scan")
     assert uri.startswith("data:image/svg+xml;base64,")
     assert len(uri) > 1000
+
+
+def test_parse_set_cookie_headers():
+    headers = [
+        "SESSDATA=abc%2C123; Path=/; Domain=.bilibili.com; HttpOnly",
+        "bili_jct=token123; Path=/",
+        "DedeUserID=42; Path=/; Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+    ]
+    cookies = bili_login._parse_set_cookie(headers)
+    assert cookies["SESSDATA"] == "abc%2C123"
+    assert cookies["bili_jct"] == "token123"
+    assert cookies["DedeUserID"] == "42"

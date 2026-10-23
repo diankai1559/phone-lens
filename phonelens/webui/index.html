@@ -29,7 +29,10 @@
   .logo { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
   .logo span { color: var(--accent); }
   .sub { color: var(--muted); font-size: 12px; }
-  .health { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .health-wrap { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .health { display: flex; gap: 8px; flex-wrap: wrap; }
+  .acct { min-width: 86px; padding: 6px 12px; font-size: 12px; }
+  .acct.ok { background: transparent; color: var(--ok); border-color: #14532d; cursor: default; }
   .dot { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
   .dot i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
   .dot.bad i { background: var(--err); }
@@ -119,8 +122,10 @@
     <div class="logo">机鉴 <span>phonelens</span></div>
     <div class="sub">多源 · 可溯源 · 会标冲突的手机评测报告</div>
   </div>
-  <div class="health" id="health"></div>
-  <button id="loginBtn" class="btn-ghost" style="display:none;margin-left:10px;padding:6px 12px;font-size:12px">扫码登录</button>
+  <div class="health-wrap">
+    <button id="loginBtn" class="btn-ghost acct">扫码登录</button>
+    <div class="health" id="health"></div>
+  </div>
 </header>
 
 <main>
@@ -290,7 +295,16 @@ async function loadHealth() {
       return `<span class="dot ${cls}" title="${esc(s.detail)}"><i></i>${esc(name)}</span>`;
     }).join("");
     const bili = data.sources.find(s => s.name === "bilibili");
-    $("loginBtn").style.display = (bili && String(bili.detail).includes("匿名")) ? "inline-block" : "none";
+    const btn = $("loginBtn");
+    if (bili && String(bili.detail).includes("匿名")) {
+      btn.textContent = "扫码登录";
+      btn.disabled = false;
+      btn.className = "btn-ghost acct";
+    } else if (bili) {
+      btn.textContent = "已登录";
+      btn.disabled = true;
+      btn.className = "btn-ghost acct ok";
+    }
   } catch (e) {
     $("health").innerHTML = '<span class="dot bad"><i></i>后端未连接</span>';
   }
@@ -326,6 +340,7 @@ async function checkLogin() {
     const labels = {
       waiting: "等待扫码…",
       scanned: "已扫码，请在手机上确认",
+      finalizing: "正在保存登录凭证…",
       confirmed: "登录成功",
       expired: "二维码已过期，点刷新重试",
       error: "登录失败：" + (data.detail || ""),

@@ -132,6 +132,23 @@ def _detect_brand(norm: str) -> Optional[str]:
     return best
 
 
+CN_BRANDS = ["小米", "红米", "华为", "荣耀", "苹果", "一加", "真我", "三星", "爱酷"]
+EN_BRANDS = ["xiaomi", "redmi", "honor", "huawei", "oneplus", "realme", "samsung", "oppo", "vivo", "iqoo"]
+
+
+def _strip_brand_and_variant(series: str, variant: Optional[str]) -> str:
+    text = series
+    for brand in CN_BRANDS:
+        text = text.replace(brand, "")
+    for brand in EN_BRANDS:
+        text = re.sub(re.escape(brand), " ", text, flags=re.I)
+    if variant:
+        for key, _ in VARIANTS:
+            text = re.sub(re.escape(key) + r"\s*$", "", text, flags=re.I)
+    text = re.sub(r"\s+", " ", text).strip(" -_")
+    return text or series
+
+
 def _parse_unknown(query: str, variant: Optional[str]) -> Resolution:
     norm = normalize(query)
     brand = _detect_brand(norm)
@@ -158,7 +175,10 @@ def _parse_unknown(query: str, variant: Optional[str]) -> Resolution:
         cleaned = re.sub(r"[^\w\u4e00-\u9fa5]+", " ", str(query)).strip()
         series_name = cleaned.title() if cleaned else str(query)
 
+    series_name = _strip_brand_and_variant(series_name, variant)
     family = f"{brand} {series_name}".strip() if brand else series_name
+    if brand and series_name.lower().startswith(brand.lower()):
+        family = series_name
     if brand is None:
         family = series_name
         for key, implied in IMPLIED_BRAND.items():
