@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "diankai" }]
-dependencies = ["requests>=2.28"]
+dependencies = ["requests>=2.28", "qrcode>=7.4"]
 
 [project.optional-dependencies]
 web = ["fastapi>=0.110", "uvicorn>=0.27"]

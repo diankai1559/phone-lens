@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from . import bili_login
 from .chat import Conversation
 from .config import load_llm
 from .sources import probe_all
@@ -24,6 +25,7 @@ from .bilibili import BiliClient
 app = FastAPI(title="phonelens", version="0.1.0")
 
 JOBS: Dict[str, dict] = {}
+LOGIN: Dict[str, bili_login.LoginSession] = {}
 LOCK = threading.Lock()
 
 
@@ -153,6 +155,31 @@ def chat(req: ChatIn) -> dict:
         "mismatched": answer.mismatched,
         "grounded": answer.grounded,
     }
+
+
+@app.post("/api/login/qr")
+def login_qr() -> dict:
+    session = bili_login.create()
+    sid = uuid.uuid4().hex[:10]
+    LOGIN[sid] = session
+
+    def worker() -> None:
+        while session.age < 180:
+            bili_login.poll_once(session)
+            if session.status in ("confirmed", "expired", "error"):
+                return
+            time.sleep(2)
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"id": sid, "qr": bili_login.svg(session.url), "status": session.status}
+
+
+@app.get("/api/login/qr/{sid}")
+def login_status(sid: str) -> dict:
+    session = LOGIN.get(sid)
+    if not session:
+        raise HTTPException(status_code=404, detail="二维码已失效，请刷新")
+    return {"status": session.status, "detail": session.detail, "age": int(session.age)}
 
 
 def serve(host: str = "127.0.0.1", port: int = 8000) -> None:

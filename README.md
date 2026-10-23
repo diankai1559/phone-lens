@@ -30,6 +30,14 @@ B 站登录态从 `~/.bilibili-cli/credential.json` 读取（bilibili-cli 生成
 
 - 凭证只放在用户目录，仓库里没有任何账号信息。
 
+## 登录
+
+```bash
+phonelens login        # 终端里打印二维码，用 B 站 App 扫
+```
+
+网页界面右上角也有「扫码登录」，登录成功后重新生成报告即可拿到字幕。凭证写入 `~/.phonelens/credential.json`，不会上传。
+
 ## 用法
 
 ```bash

@@ -95,6 +95,21 @@
   .chat-input { display: flex; gap: 8px; margin-top: 10px; }
   .chat-input input { flex: 1; }
   .err { color: var(--err); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
+  .mask {
+    position: fixed; inset: 0; background: rgba(2,6,12,.72); display: none;
+    align-items: center; justify-content: center; z-index: 20; backdrop-filter: blur(2px);
+  }
+  .modal {
+    width: 320px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px; text-align: center;
+  }
+  .modal h3 { margin: 0 0 14px; font-size: 15px; }
+  .modal .qr { background: #fff; border-radius: 10px; padding: 10px; display: inline-block; }
+  .modal .qr img { width: 200px; height: 200px; display: block; }
+  .qtext { margin: 12px 0 4px; font-size: 13px; color: var(--accent); min-height: 18px; }
+  .qnote { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 10px 0 0; }
+  .qrow { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+  .qrow button { padding: 7px 12px; font-size: 12px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 55vh; } }
 </style>
 </head>
@@ -105,6 +120,7 @@
     <div class="sub">多源 · 可溯源 · 会标冲突的手机评测报告</div>
   </div>
   <div class="health" id="health"></div>
+  <button id="loginBtn" class="btn-ghost" style="display:none;margin-left:10px;padding:6px 12px;font-size:12px">扫码登录</button>
 </header>
 
 <main>
@@ -173,6 +189,19 @@
   </section>
 </main>
 
+<div id="loginMask" class="mask">
+  <div class="modal">
+    <h3>扫码登录 B 站</h3>
+    <div class="qr"><img id="qrImg" alt="登录二维码" /></div>
+    <div class="qtext" id="qrStatus">生成二维码…</div>
+    <div class="qrow">
+      <button id="qrRefresh" class="btn-ghost">刷新</button>
+      <button id="qrClose" class="btn-ghost">关闭</button>
+    </div>
+    <p class="qnote">登录只在获取字幕/摘要时使用，凭证保存在本机 ~/.phonelens，不会上传。</p>
+  </div>
+</div>
+
 <script>
 const STAGES = [
   ["resolve", "机型对齐"],
@@ -184,7 +213,7 @@ const STAGES = [
   ["render", "渲染报告"],
   ["verify", "反向校验"],
 ];
-let jobId = null, timer = null, poll = null;
+let jobId = null, timer = null, poll = null, qrTimer = null, qrId = null;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -259,9 +288,56 @@ async function loadHealth() {
       const cls = s.status === "ok" ? "" : (s.status === "need_key" ? "warn" : "bad");
       return `<span class="dot ${cls}" title="${esc(s.detail)}"><i></i>${esc(s.name)}</span>`;
     }).join("");
+    const bili = data.sources.find(s => s.name === "bilibili");
+    $("loginBtn").style.display = (bili && String(bili.detail).includes("匿名")) ? "inline-block" : "none";
   } catch (e) {
     $("health").innerHTML = '<span class="dot bad"><i></i>后端未连接</span>';
   }
+}
+
+function showLogin(visible) {
+  $("loginMask").style.display = visible ? "flex" : "none";
+}
+
+async function openLogin() {
+  showLogin(true);
+  $("qrStatus").textContent = "生成二维码…";
+  $("qrImg").removeAttribute("src");
+  clearInterval(qrTimer); qrTimer = null;
+  try {
+    const res = await fetch("/api/login/qr", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "生成失败");
+    qrId = data.id;
+    $("qrImg").src = data.qr;
+    $("qrStatus").textContent = "等待扫码…";
+    qrTimer = setInterval(checkLogin, 2000);
+  } catch (e) {
+    $("qrStatus").textContent = "生成失败：" + e.message;
+  }
+}
+
+async function checkLogin() {
+  if (!qrId) return;
+  try {
+    const res = await fetch(`/api/login/qr/${qrId}`);
+    const data = await res.json();
+    const labels = {
+      waiting: "等待扫码…",
+      scanned: "已扫码，请在手机上确认",
+      confirmed: "登录成功",
+      expired: "二维码已过期，点刷新重试",
+      error: "登录失败：" + (data.detail || ""),
+    };
+    $("qrStatus").textContent = labels[data.status] || data.status;
+    if (data.status === "confirmed") {
+      clearInterval(qrTimer); qrTimer = null;
+      await loadHealth();
+      setTimeout(() => showLogin(false), 900);
+    } else if (data.status === "expired" || data.status === "error") {
+      clearInterval(qrTimer); qrTimer = null;
+    }
+  } catch (e) { /* keep polling */ }
 }
 
 async function start() {
@@ -312,6 +388,11 @@ async function tick() {
   const checks = (v.checks || []).map(c => `<span class="badge ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"} ${esc(c.name)}</span>`).join("");
   $("stats").innerHTML = `<span class="badge ok">${data.claims.length} claims</span>` +
     `<span class="badge ${data.conflicts.length ? "warn" : "ok"}">${data.conflicts.length} 冲突</span>` + checks;
+  if (!data.claims.length) {
+    $("stats").innerHTML += ` <span class="badge warn">未取到正文，可能需要登录 <a href="#" id="loginInline" style="color:inherit">扫码登录</a></span>`;
+    const link = document.getElementById("loginInline");
+    if (link) link.onclick = (e) => { e.preventDefault(); openLogin(); };
+  }
   $("report").innerHTML = md(data.report || "");
   renderEvidence(data);
   $("msgs").innerHTML = `<div class="msg bot">已载入 ${data.claims.length} 条 claim，可以开始追问。</div>`;
@@ -354,6 +435,10 @@ document.querySelectorAll(".tab").forEach(tab => tab.onclick = () => {
 });
 $("run").onclick = start;
 $("reset").onclick = () => { location.reload(); };
+$("loginBtn").onclick = openLogin;
+$("qrRefresh").onclick = openLogin;
+$("qrClose").onclick = () => showLogin(false);
+$("loginMask").onclick = (e) => { if (e.target.id === "loginMask") showLogin(false); };
 $("send").onclick = ask;
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
 $("query").addEventListener("keydown", (e) => { if (e.key === "Enter") start(); });

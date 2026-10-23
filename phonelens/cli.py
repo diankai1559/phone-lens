@@ -95,10 +95,27 @@ def cmd_agent(args) -> int:
     return 0 if result.verification.ok else 1
 
 
+def cmd_login(args) -> int:
+    from . import bili_login
+
+    session = bili_login.create()
+    print("用 B 站 App 扫描下面的二维码：\n")
+    print(bili_login.ascii_qr(session.url))
+    print(f"链接：{session.url}\n等待扫码…")
+    result = bili_login.wait(session, timeout=args.timeout)
+    if result.status == "confirmed":
+        print("登录成功，凭证已保存到 ~/.phonelens/credential.json")
+        return 0
+    print(f"登录未完成：{result.status} {result.detail}")
+    return 1
+
+
 def cmd_probe(_args) -> int:
     statuses = probe_all(BiliClient())
     for status in statuses:
         print(f"{status.name:<18} {status.status:<10} {status.detail}")
+    if any(s.name == "bilibili" and "匿名" in s.detail for s in statuses):
+        print("\n未登录：运行 `phonelens login` 扫码后可获取 AI 字幕和摘要。")
     return 0
 
 
@@ -196,6 +213,10 @@ def main(argv=None) -> int:
 
     probe = sub.add_parser("probe", help="检测各信源可用性")
     probe.set_defaults(func=cmd_probe)
+
+    login = sub.add_parser("login", help="扫码登录 B 站（获取字幕权限）")
+    login.add_argument("--timeout", type=int, default=180)
+    login.set_defaults(func=cmd_login)
 
     agent = sub.add_parser("agent", help="Agent 模式：自己决定补什么证据，输出购买参考")
     agent.add_argument("query")
