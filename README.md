@@ -24,6 +24,20 @@ python -m phonelens serve --port 8000            # 网页界面
 
 网页界面左边是阶段进度，右边分「报告 / 证据 / 对话」三栏；未登录时右上角会出现「扫码登录」。
 
+## Docker
+
+镜像里已经装好 Chromium 和 ffmpeg，换机器不用再配浏览器依赖：
+
+```powershell
+docker build -t phonelens .
+docker run -d --name phonelens -p 8000:8000 `
+  -v "${env:USERPROFILE}\.phonelens:/data" `
+  -e DEEPSEEK_API_KEY=$env:DEEPSEEK_API_KEY `
+  phonelens
+```
+
+打开 <http://localhost:8000>。`/data` 挂载的是凭证和缓存，删容器不会丢；扫码登录后的凭证也写在里面。
+
 需要两个环境变量：
 
 ```powershell

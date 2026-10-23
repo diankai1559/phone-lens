@@ -78,12 +78,14 @@ def discover(family: str, variant: str) -> Optional[str]:
 
 def _render(url: str) -> str:
     exe = _chromium()
-    if not exe:
-        raise RuntimeError("未找到 Chromium（可设置 PHONELENS_CHROMIUM）")
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, executable_path=exe)
+        browser = (
+            p.chromium.launch(headless=True, executable_path=exe)
+            if exe
+            else p.chromium.launch(headless=True)
+        )
         page = browser.new_page(user_agent=UA)
         page.goto(url, wait_until="networkidle", timeout=60000)
         page.wait_for_timeout(2000)
