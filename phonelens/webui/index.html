@@ -218,7 +218,7 @@ const STAGES = [
   ["render", "渲染报告"],
   ["verify", "反向校验"],
 ];
-let jobId = null, timer = null, poll = null, qrTimer = null, qrId = null;
+let jobId = null, timer = null, poll = null, qrTimer = null, qrId = null, runStart = 0;
 const SID = (() => {
   let value = localStorage.getItem("phonelens_sid");
   if (!value) {
@@ -380,6 +380,7 @@ async function start() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "启动失败");
     jobId = data.job_id;
+    runStart = Date.now();
     poll = setInterval(tick, 700);
   } catch (e) {
     $("err").textContent = e.message;
@@ -396,7 +397,8 @@ async function tick() {
   } catch (e) { return; }
 
   if (data.status === "running") {
-    renderStages(data.stage, data.detail, false);
+    const elapsed = runStart ? `（${Math.round((Date.now() - runStart) / 1000)}s）` : "";
+    renderStages(data.stage, data.detail + elapsed, false);
     return;
   }
   clearInterval(poll); poll = null; $("run").disabled = false;
@@ -419,6 +421,11 @@ async function tick() {
   }
   $("report").innerHTML = md(data.report || "");
   renderEvidence(data);
+  const loaded = data.session_models || [];
+  if (loaded.length > 1) {
+    $("claims").insertAdjacentHTML("afterbegin",
+      `<div class="badge warn" style="margin-bottom:10px">会话已加载 ${loaded.length} 款：${esc(loaded.join("、"))}，对话可对比；本页只显示当前报告</div>`);
+  }
   const models = data.session_models || [];
   $("msgs").innerHTML = models.length
     ? `<div class="msg bot">已载入 ${models.length} 款机型：${esc(models.join("、"))}。可以直接问「哪款更值得买」，我会按同一口径对比。</div>`
@@ -438,16 +445,20 @@ async function ask() {
   $("msgs").scrollTop = $("msgs").scrollHeight;
 
   try {
+    const ctrl = new AbortController();
+    const guard = setTimeout(() => ctrl.abort(), 120000);
     const res = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId, session_id: SID, question: q })
+      body: JSON.stringify({ job_id: jobId, session_id: SID, question: q }),
+      signal: ctrl.signal
     });
+    clearTimeout(guard);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "对话失败");
     loading.className = "msg bot md";
     loading.innerHTML = md(data.text) + `<span class="meta">${data.grounded ? "✓ 有依据" : "⚠ 无依据"} · 引用 ${data.citations.join(", ") || "无"}</span>`;
   } catch (e) {
-    loading.textContent = "出错：" + e.message;
+    loading.textContent = e.name === "AbortError" ? "请求超时（>120s），稍后重试" : "出错：" + e.message;
     loading.style.color = "var(--err)";
   }
   $("msgs").scrollTop = $("msgs").scrollHeight;

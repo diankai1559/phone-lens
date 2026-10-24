@@ -86,12 +86,13 @@ def _render(url: str) -> str:
             if exe
             else p.chromium.launch(headless=True)
         )
-        page = browser.new_page(user_agent=UA)
-        page.goto(url, wait_until="networkidle", timeout=60000)
-        page.wait_for_timeout(2000)
-        text = page.inner_text("body")
-        browser.close()
-    return text
+        try:
+            page = browser.new_page(user_agent=UA)
+            page.goto(url, wait_until="networkidle", timeout=60000)
+            page.wait_for_timeout(2000)
+            return page.inner_text("body")
+        finally:
+            browser.close()
 
 
 def _llm_claims(text: str, model_name: str, url: str, llm: LLMConfig) -> List[Claim]:

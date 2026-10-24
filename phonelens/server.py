@@ -6,6 +6,7 @@ The report pipeline stays in the CLI; the server only orchestrates jobs.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
@@ -18,7 +19,8 @@ from pydantic import BaseModel
 
 from . import bili_login
 from .chat import Conversation
-from .config import load_llm
+from .config import APP_DIR, load_llm
+from .models import Claim, SourceRef
 from .sources import probe_all
 from .bilibili import BiliClient
 
@@ -27,7 +29,63 @@ app = FastAPI(title="phonelens", version="0.1.0")
 JOBS: Dict[str, dict] = {}
 LOGIN: Dict[str, bili_login.LoginSession] = {}
 SESSIONS: Dict[str, dict] = {}
+SESS_DIR = APP_DIR / "sessions"
+REPORT_LOCK = threading.Lock()
 LOCK = threading.Lock()
+
+
+def _load_session(session_id: str) -> Optional[dict]:
+    if session_id in SESSIONS:
+        return SESSIONS[session_id]
+    path = SESS_DIR / f"{session_id}.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    claims = []
+    for raw in data.get("claims") or []:
+        source = SourceRef(**raw["source"])
+        claims.append(
+            Claim(
+                id=raw["id"],
+                model=raw["model"],
+                metric=raw["metric"],
+                value=raw["value"],
+                unit=raw.get("unit", ""),
+                condition=raw.get("condition") or {},
+                quote=raw.get("quote", ""),
+                source=source,
+                confidence=raw.get("confidence", "medium"),
+            )
+        )
+    if not claims:
+        return None
+    from .conflict import detect
+
+    claims, conflicts = detect(claims)
+    models = sorted({c.model for c in claims})
+    conversation = Conversation(load_llm(), claims, conflicts, "、".join(models))
+    session = {
+        "prefix": int(data.get("prefix", 0)),
+        "claims": claims,
+        "conflicts": conflicts,
+        "conversation": conversation,
+    }
+    SESSIONS[session_id] = session
+    return session
+
+
+def _save_session(session_id: str, session: dict) -> None:
+    SESS_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "prefix": session["prefix"],
+        "claims": [c.to_dict() for c in session["claims"]],
+    }
+    (SESS_DIR / f"{session_id}.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 class ReportIn(BaseModel):
@@ -54,9 +112,10 @@ def _update(job_id: str, **fields) -> None:
 def _merge_session(session_id: str, claims: list) -> tuple:
     from .conflict import detect, normalize_claim
 
-    sess = SESSIONS.setdefault(
-        session_id, {"prefix": 0, "claims": [], "conflicts": [], "conversation": None}
-    )
+    sess = _load_session(session_id) or {
+        "prefix": 0, "claims": [], "conflicts": [], "conversation": None
+    }
+    SESSIONS[session_id] = sess
     index = sess["prefix"]
     prefix = chr(65 + index) if index < 26 else f"Z{index}"
     sess["prefix"] = index + 1
@@ -83,6 +142,7 @@ def _merge_session(session_id: str, claims: list) -> tuple:
     if previous is not None:
         conversation.history = previous.history
     sess["conversation"] = conversation
+    _save_session(session_id, sess)
     return sess, models
 
 
@@ -139,6 +199,8 @@ def _worker(job_id: str, req: ReportIn) -> None:
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the UI job
         _update(job_id, status="error", error=str(exc), updated=time.time())
+    finally:
+        REPORT_LOCK.release()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -156,6 +218,8 @@ def probe() -> dict:
 def create_report(req: ReportIn) -> dict:
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="机型不能为空")
+    if not REPORT_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="已有报告在生成，请等它结束再试")
     job_id = uuid.uuid4().hex[:12]
     JOBS[job_id] = {
         "id": job_id,
@@ -186,7 +250,7 @@ def get_report(job_id: str) -> dict:
 def chat(req: ChatIn) -> dict:
     conversation: Optional[Conversation] = None
     if req.session_id:
-        sess = SESSIONS.get(req.session_id)
+        sess = _load_session(req.session_id)
         if sess:
             conversation = sess.get("conversation")
     if conversation is None and req.job_id:
